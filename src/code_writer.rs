@@ -32,6 +32,7 @@ impl CodeWriter {
         match cmd {
             "add" => {
                 String::new()
+                    + "// start ======= add\n"
                     + &self._write_pop("temp", 0)
                     + &self._write_pop("temp", 1)
                     + "// start ======= temp0 = temp1 + temp0\n"
@@ -39,12 +40,172 @@ impl CodeWriter {
                     + "A=A+1\n"
                     + "D=M\n"
                     + "@TEMP\n"
-                    + "M=D+M\n"
+                    + "M=D+M\n" // D: x, M: y
                     + "// end ======= temp0 = temp1 + temp0\n"
                     + "\n"
                     + &&self._write_push("temp", 0)
+                    + "// end ======= add\n"
+                    + "\n"
             }
-            _ => todo!(),
+            "sub" => {
+                String::new()
+                    + "// start ======= sub\n"
+                    + &self._write_pop("temp", 0)
+                    + &self._write_pop("temp", 1)
+                    + "// start ======= temp0 = temp1 - temp0\n"
+                    + "@TEMP\n"
+                    + "A=A+1\n"
+                    + "D=M\n"
+                    + "@TEMP\n"
+                    + "M=D-M\n" // D: x, M: y
+                    + "// end ======= temp0 = temp1 - temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= sub\n"
+                    + "\n"
+            }
+            "neg" => {
+                String::new()
+                    + "// start ======= neg\n"
+                    + &self._write_pop("temp", 0)
+                    + "// start ======= temp0 = -temp0\n"
+                    + "@TEMP\n"
+                    + "M=-M\n"
+                    + "// end ======= temp0 = -temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= neg\n"
+                    + "\n"
+            }
+            "eq" => {
+                String::new()
+                    + "// start ======= eq\n"
+                    + &self._write_pop("temp", 0)
+                    + &self._write_pop("temp", 1)
+                    + "// start ======= temp0 := temp1 == temp0\n"
+                    + "@TEMP\n"
+                    + "A=A+1\n"
+                    + "D=M\n"
+                    + "@TEMP\n"
+                    + "M=D-M\n" // D: x, M: y
+                    + "D=M\n" // if D(x-y)==0, M=true(-1), else M=false(0)
+                    + "M=0\n" // bool=false(0)
+                    + "@HIT\n"
+                    + "D;JEQ\n"
+                    + "@CONTINUE\n"
+                    + "0;JMP\n"
+                    + "(HIT)\n" // test hit, bool=true(-1)
+                    + "@TEMP\n"
+                    + "M=-1\n"
+                    + "(CONTINUE)\n"
+                    + "// end ======= temp0 := temp1 == temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= eq\n"
+                    + "\n"
+            }
+            "gt" => {
+                String::new()
+                    + "// start ======= gt\n"
+                    + &self._write_pop("temp", 0)
+                    + &self._write_pop("temp", 1)
+                    + "// start ======= temp0 := temp1 > temp0\n"
+                    + "@TEMP\n"
+                    + "A=A+1\n"
+                    + "D=M\n"
+                    + "@TEMP\n"
+                    + "M=D-M\n" // D: x, M: y
+                    + "D=M\n" // if D(x-y) > 0, M=true(-1), else M=false(0)
+                    + "M=0\n" // bool=false(0)
+                    + "@HIT\n"
+                    + "D;JGT\n"
+                    + "@CONTINUE\n"
+                    + "0;JMP\n"
+                    + "(HIT)\n" // test hit, bool=true(-1)
+                    + "@TEMP\n"
+                    + "M=-1\n"
+                    + "(CONTINUE)\n"
+                    + "// end ======= temp0 := temp1 > temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= gt\n"
+                    + "\n"
+            }
+            "lt" => {
+                String::new()
+                    + "// start ======= lt\n"
+                    + &self._write_pop("temp", 0)
+                    + &self._write_pop("temp", 1)
+                    + "// start ======= temp0 := temp1 < temp0\n"
+                    + "@TEMP\n"
+                    + "A=A+1\n"
+                    + "D=M\n"
+                    + "@TEMP\n"
+                    + "M=D-M\n" // D: x, M: y
+                    + "D=M\n" // if D(x-y) < 0, M=true(-1), else M=false(0)
+                    + "M=0\n" // bool=false(0)
+                    + "@HIT\n"
+                    + "D;JLT\n"
+                    + "@CONTINUE\n"
+                    + "0;JMP\n"
+                    + "(HIT)\n" // test hit, bool=true(-1)
+                    + "@TEMP\n"
+                    + "M=-1\n"
+                    + "(CONTINUE)\n"
+                    + "// end ======= temp0 := temp1 < temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= lt\n"
+                    + "\n"
+            }
+            "and" => {
+                String::new()
+                    + "// start ======= and\n"
+                    + &self._write_pop("temp", 0)
+                    + &self._write_pop("temp", 1)
+                    + "// start ======= temp0 = temp1 & temp0\n"
+                    + "@TEMP\n"
+                    + "A=A+1\n"
+                    + "D=M\n"
+                    + "@TEMP\n"
+                    + "M=D&M\n" // D: x, M: y
+                    + "// end ======= temp0 = temp1 & temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= and\n"
+                    + "\n"
+            }
+            "or" => {
+                String::new()
+                    + "// start ======= or\n"
+                    + &self._write_pop("temp", 0)
+                    + &self._write_pop("temp", 1)
+                    + "// start ======= temp0 = temp1 | temp0\n"
+                    + "@TEMP\n"
+                    + "A=A+1\n"
+                    + "D=M\n"
+                    + "@TEMP\n"
+                    + "M=D|M\n" // D: x, M: y
+                    + "// end ======= temp0 = temp1 | temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= or\n"
+                    + "\n"
+            }
+            "not" => {
+                String::new()
+                    + "// start ======= not\n"
+                    + &self._write_pop("temp", 0)
+                    + "// start ======= temp0 = !temp0\n"
+                    + "@TEMP\n"
+                    + "M=!M\n"
+                    + "// end ======= temp0 = !temp0\n"
+                    + "\n"
+                    + &&self._write_push("temp", 0)
+                    + "// end ======= not\n"
+                    + "\n"
+            }
+            cmd => panic!("arithmetic command syntax error: unknow command `{cmd}`"),
         }
     }
 
