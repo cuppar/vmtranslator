@@ -28,7 +28,7 @@ impl CodeWriter {
         Ok(Self { file, mem_seg_map })
     }
 
-    fn _write_arithmetic(&mut self, cmd: &str) -> String {
+    fn _write_arithmetic(&mut self, cmd: &str, id: &str) -> String {
         match cmd {
             "add" => {
                 String::new()
@@ -90,14 +90,14 @@ impl CodeWriter {
                     + "M=D-M\n" // D: x, M: y
                     + "D=M\n" // if D(x-y)==0, M=true(-1), else M=false(0)
                     + "M=0\n" // bool=false(0)
-                    + "@HIT\n"
+                    + &format!("@HIT_{}\n", id)
                     + "D;JEQ\n"
-                    + "@CONTINUE\n"
+                    + &format!("@CONTINUE_{}\n", id)
                     + "0;JMP\n"
-                    + "(HIT)\n" // test hit, bool=true(-1)
+                    + &format!("(HIT_{})\n", id) // test hit, bool=true(-1)
                     + "@TEMP\n"
                     + "M=-1\n"
-                    + "(CONTINUE)\n"
+                    + &format!("(CONTINUE_{})\n", id)
                     + "// end ======= temp0 := temp1 == temp0\n"
                     + "\n"
                     + &&self._write_push("temp", 0)
@@ -117,14 +117,14 @@ impl CodeWriter {
                     + "M=D-M\n" // D: x, M: y
                     + "D=M\n" // if D(x-y) > 0, M=true(-1), else M=false(0)
                     + "M=0\n" // bool=false(0)
-                    + "@HIT\n"
+                    + &format!("@HIT_{}\n", id)
                     + "D;JGT\n"
-                    + "@CONTINUE\n"
+                    + &format!("@CONTINUE_{}\n", id)
                     + "0;JMP\n"
-                    + "(HIT)\n" // test hit, bool=true(-1)
+                    + &format!("(HIT_{})\n", id) // test hit, bool=true(-1)
                     + "@TEMP\n"
                     + "M=-1\n"
-                    + "(CONTINUE)\n"
+                    + &format!("(CONTINUE_{})\n", id)
                     + "// end ======= temp0 := temp1 > temp0\n"
                     + "\n"
                     + &&self._write_push("temp", 0)
@@ -144,14 +144,14 @@ impl CodeWriter {
                     + "M=D-M\n" // D: x, M: y
                     + "D=M\n" // if D(x-y) < 0, M=true(-1), else M=false(0)
                     + "M=0\n" // bool=false(0)
-                    + "@HIT\n"
+                    + &format!("@HIT_{}\n", id)
                     + "D;JLT\n"
-                    + "@CONTINUE\n"
+                    + &format!("@CONTINUE_{}\n", id)
                     + "0;JMP\n"
-                    + "(HIT)\n" // test hit, bool=true(-1)
+                    + &format!("(HIT_{})\n", id) // test hit, bool=true(-1)
                     + "@TEMP\n"
                     + "M=-1\n"
-                    + "(CONTINUE)\n"
+                    + &format!("(CONTINUE_{})\n", id)
                     + "// end ======= temp0 := temp1 < temp0\n"
                     + "\n"
                     + &&self._write_push("temp", 0)
@@ -209,8 +209,8 @@ impl CodeWriter {
         }
     }
 
-    pub fn write_arithmetic(&mut self, cmd: &str) -> io::Result<()> {
-        let buf = self._write_arithmetic(cmd);
+    pub fn write_arithmetic(&mut self, cmd: &str, id: &str) -> io::Result<()> {
+        let buf = self._write_arithmetic(cmd, id);
         self.file.write_all(buf.as_bytes())?;
         Ok(())
     }
@@ -363,7 +363,7 @@ mod tests {
     fn test_write_to_file() -> io::Result<()> {
         let file_path = Path::new("./test.asm");
         let mut code_writer = CodeWriter::new(file_path)?;
-        code_writer.write_arithmetic("add")?;
+        code_writer.write_arithmetic("add", "1")?;
         code_writer.close()?;
         fs::remove_file(file_path)?;
         Ok(())

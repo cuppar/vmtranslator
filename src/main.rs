@@ -33,7 +33,8 @@ fn main() -> result::Result<(), Box<dyn Error>> {
                 Push | Pop => {
                     code_writer.write_push_pop(&parser.cmd(), &parser.arg1(), parser.arg2())?
                 }
-                Arithmetic => code_writer.write_arithmetic(&parser.cmd())?,
+                Arithmetic => code_writer
+                    .write_arithmetic(&parser.cmd(), &(parser.next_cmd_number - 1).to_string())?,
                 _ => (),
             }
         }
