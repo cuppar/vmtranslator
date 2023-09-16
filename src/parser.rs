@@ -19,18 +19,7 @@ pub enum CommandType {
 
 impl CommandType {
     fn is_arithmetic(cmd: &str) -> bool {
-        match cmd {
-            "add" => true,
-            "sub" => true,
-            "neg" => true,
-            "eq" => true,
-            "gt" => true,
-            "lt" => true,
-            "and" => true,
-            "or" => true,
-            "not" => true,
-            _ => false,
-        }
+        matches!(cmd, "add" | "sub" | "neg" | "eq" | "gt" | "lt" | "and" | "or" | "not")
     }
     fn is_push(cmd: &str) -> bool {
         cmd.starts_with("push")
@@ -39,40 +28,22 @@ impl CommandType {
         cmd.starts_with("pop")
     }
     fn is_label(cmd: &str) -> bool {
-        match cmd {
-            "label" => true,
-            _ => false,
-        }
+        cmd.starts_with("label")
     }
     fn is_goto(cmd: &str) -> bool {
-        match cmd {
-            "goto" => true,
-            _ => false,
-        }
+        cmd.starts_with("goto")
     }
     fn is_if(cmd: &str) -> bool {
-        match cmd {
-            "if" => true,
-            _ => false,
-        }
+        cmd.starts_with("if-goto")
     }
     fn is_function(cmd: &str) -> bool {
-        match cmd {
-            "function" => true,
-            _ => false,
-        }
+        cmd.starts_with("function")
     }
     fn is_return(cmd: &str) -> bool {
-        match cmd {
-            "return" => true,
-            _ => false,
-        }
+        matches!(cmd, "return")
     }
     fn is_call(cmd: &str) -> bool {
-        match cmd {
-            "call" => true,
-            _ => false,
-        }
+        cmd.starts_with("call")
     }
 
     fn get_type(cmd: &str) -> Self {
@@ -178,24 +149,20 @@ impl Parser {
     }
 
     pub fn arg1(&self) -> String {
-        assert_ne!(
-            self.get_cmd_type(),
-            Some(CommandType::Return),
-            "Can't call arg1() in `RETURN` command"
-        );
         use CommandType::*;
         match self.get_cmd_type() {
             Some(Arithmetic) => self.current_cmd.clone().unwrap().cmd_raw,
-            Some(Push) | Some(Pop) => {
+            Some(Push) | Some(Pop) | Some(Label) | Some(Goto) | Some(If) | Some(Function)
+            | Some(Call) => {
                 let cmd_raw = self.current_cmd.clone().unwrap().cmd_raw;
                 let splited = cmd_raw.split(" ").collect::<Vec<_>>();
                 if splited.len() < 2 {
-                    panic!("push/pop need arg1");
+                    panic!("push/pop/label/goto/if-goto/function/call need arg1");
                 }
                 splited[1].to_string()
             }
+            Some(Return) => panic!("Can't call arg1() in `RETURN` command"),
             None => panic!("Can't call arg1() when have no command"),
-            _ => todo!("impl agr1 for function/call/goto..."),
         }
     }
 
@@ -205,11 +172,11 @@ impl Parser {
             Some(Arithmetic) | Some(Goto) | Some(If) | Some(Label) | Some(Return) => {
                 panic!("Should call arg2() in `PUSH` `POP` `FUNCTION` or `CALL` command")
             }
-            Some(Push) | Some(Pop) => {
+            Some(Push) | Some(Pop) | Some(Function) | Some(Call) => {
                 let cmd_raw = self.current_cmd.clone().unwrap().cmd_raw;
                 let splited = cmd_raw.split(" ").collect::<Vec<_>>();
                 if splited.len() < 3 {
-                    panic!("push/pop need arg2");
+                    panic!("push/pop/function/call need arg2");
                 }
                 if let Ok(arg2) = splited[2].parse::<i32>() {
                     return arg2;
@@ -217,7 +184,6 @@ impl Parser {
                     panic!("arg2 need a int number");
                 }
             }
-            Some(Function) | Some(Call) => todo!(),
             None => panic!("Can't call arg2() when have no command"),
         }
     }
@@ -370,6 +336,7 @@ mod tests {
             assert_eq!(parser.get_cmd_type(), Some(CommandType::Push));
         }
     }
+
     #[test]
     fn test_get_cmd_type_pop() -> io::Result<()> {
         let mut test_file = TestFile::new()?;
@@ -388,6 +355,122 @@ mod tests {
             parser.advance();
             assert_eq!(parser.get_cmd_type(), Some(CommandType::Pop));
         }
+    }
+
+    #[test]
+    fn test_get_cmd_type_label() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("label LABEL1")?;
+        test_file.add_line("label LABEL2")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        assert_eq!(parser.get_cmd_type(), None);
+
+        loop {
+            if !parser.has_more_lines() {
+                return Ok(());
+            }
+            parser.advance();
+            assert_eq!(parser.get_cmd_type(), Some(CommandType::Label));
+        }
+    }
+
+    #[test]
+    fn test_get_cmd_type_goto() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("goto LABEL1")?;
+        test_file.add_line("goto LABEL2")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        assert_eq!(parser.get_cmd_type(), None);
+
+        loop {
+            if !parser.has_more_lines() {
+                return Ok(());
+            }
+            parser.advance();
+            assert_eq!(parser.get_cmd_type(), Some(CommandType::Goto));
+        }
+    }
+
+    #[test]
+    fn test_get_cmd_type_if() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("if-goto LABEL1")?;
+        test_file.add_line("if-goto LABEL2")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        assert_eq!(parser.get_cmd_type(), None);
+
+        loop {
+            if !parser.has_more_lines() {
+                return Ok(());
+            }
+            parser.advance();
+            assert_eq!(parser.get_cmd_type(), Some(CommandType::If));
+        }
+    }
+
+    #[test]
+    fn test_get_cmd_type_function() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("function f1 0")?;
+        test_file.add_line("function f2 3")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        assert_eq!(parser.get_cmd_type(), None);
+
+        loop {
+            if !parser.has_more_lines() {
+                return Ok(());
+            }
+            parser.advance();
+            assert_eq!(parser.get_cmd_type(), Some(CommandType::Function));
+        }
+    }
+
+    #[test]
+    fn test_get_cmd_type_call() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("call f1 0")?;
+        test_file.add_line("call f2 3")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        assert_eq!(parser.get_cmd_type(), None);
+
+        loop {
+            if !parser.has_more_lines() {
+                return Ok(());
+            }
+            parser.advance();
+            assert_eq!(parser.get_cmd_type(), Some(CommandType::Call));
+        }
+    }
+
+    #[test]
+    fn test_get_cmd_type_return() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("return")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        assert_eq!(parser.get_cmd_type(), None);
+
+        parser.advance();
+        assert_eq!(parser.get_cmd_type(), Some(CommandType::Return));
+
+        Ok(())
     }
 
     #[test]
@@ -443,6 +526,11 @@ mod tests {
         test_file.clear()?;
         test_file.add_line("push local 1")?;
         test_file.add_line("pop static 2")?;
+        test_file.add_line("label LABEL1")?;
+        test_file.add_line("goto LABEL2")?;
+        test_file.add_line("if-goto LABEL3")?;
+        test_file.add_line("function functionName 3")?;
+        test_file.add_line("call functionName 3")?;
 
         let mut parser = Parser::new(&Path::new(&test_file.path))?;
 
@@ -451,6 +539,21 @@ mod tests {
 
         parser.advance();
         assert_eq!(parser.arg1(), "static");
+
+        parser.advance();
+        assert_eq!(parser.arg1(), "LABEL1");
+
+        parser.advance();
+        assert_eq!(parser.arg1(), "LABEL2");
+
+        parser.advance();
+        assert_eq!(parser.arg1(), "LABEL3");
+
+        parser.advance();
+        assert_eq!(parser.arg1(), "functionName");
+
+        parser.advance();
+        assert_eq!(parser.arg1(), "functionName");
 
         Ok(())
     }
@@ -516,7 +619,7 @@ mod tests {
     fn test_arg2_cant_be_call_in_if() {
         let mut test_file = TestFile::new().unwrap();
         test_file.clear().unwrap();
-        test_file.add_line("if").unwrap();
+        test_file.add_line("if-goto LABEL").unwrap();
 
         let mut parser = Parser::new(&Path::new(&test_file.path)).unwrap();
 
@@ -539,6 +642,7 @@ mod tests {
         // should panic
         parser.arg2();
     }
+
     #[test]
     fn test_arg2_in_push_and_pop() -> io::Result<()> {
         let mut test_file = TestFile::new()?;
@@ -556,6 +660,25 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_arg2_in_function_and_call() -> io::Result<()> {
+        let mut test_file = TestFile::new()?;
+        test_file.clear()?;
+        test_file.add_line("function functionName 3")?;
+        test_file.add_line("call functionName 3")?;
+
+        let mut parser = Parser::new(&Path::new(&test_file.path))?;
+
+        parser.advance();
+        assert_eq!(parser.arg2(), 3);
+
+        parser.advance();
+        assert_eq!(parser.arg2(), 3);
+
+        Ok(())
+    }
+
     #[test]
     fn test_cmd() -> io::Result<()> {
         let mut test_file = TestFile::new()?;
@@ -573,6 +696,7 @@ mod tests {
 
         Ok(())
     }
+
     #[test]
     #[should_panic = "Can't call cmd() when have no command"]
     fn test_cmd_panic_in_no_cmd() {

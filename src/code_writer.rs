@@ -7,7 +7,9 @@ use std::{
 
 pub struct CodeWriter {
     file: File,
-    filename: String,
+    target_filename: String,
+    source_filename: Option<String>,
+    current_function: Option<String>,
     mem_seg_map: HashMap<String, String>,
 }
 
@@ -25,7 +27,7 @@ impl CodeWriter {
             ("that".to_string(), "THAT".to_string()),
         ]);
 
-        let filename = path
+        let target_filename = path
             .file_name()
             .ok_or(io::Error::new(io::ErrorKind::NotFound, "no filename"))?
             .to_str()
@@ -34,9 +36,19 @@ impl CodeWriter {
 
         Ok(Self {
             file,
-            filename,
+            target_filename,
+            source_filename: None,
+            current_function: None,
             mem_seg_map,
         })
+    }
+
+    pub fn set_source_file(&mut self, source_file: &str) {
+        self.source_filename = Some(source_file.to_string());
+    }
+
+    fn set_current_function(&mut self, current_function: &str) {
+        self.current_function = Some(current_function.to_string());
     }
 
     fn _write_arithmetic(&mut self, cmd: &str, id: &str) -> String {
@@ -271,7 +283,8 @@ impl CodeWriter {
                     + &"\n"
             }
             "static" => {
-                let static_var_id = format!("{}.{arg2}", self.filename);
+                assert!(self.source_filename.is_some());
+                let static_var_id = format!("{}.{arg2}", self.source_filename.clone().unwrap());
                 String::new()
                     + &format!("// start ======== push {arg1} {arg2}\n")
                     + &format!("// D={arg1}+{arg2}\n")
@@ -355,7 +368,8 @@ impl CodeWriter {
                     + &"\n"
             }
             "static" => {
-                let static_var_id = format!("{}.{arg2}", self.filename);
+                assert!(self.source_filename.is_some());
+                let static_var_id = format!("{}.{arg2}", self.source_filename.clone().unwrap());
                 String::new()
                     + &format!("// start ======== pop {arg1} {arg2}\n")
                     + &format!("// SP--\n")
@@ -419,6 +433,84 @@ impl CodeWriter {
 
     pub fn write_push_pop(&mut self, cmd: &str, arg1: &str, arg2: i32) -> io::Result<()> {
         let buf = self._write_push_pop(cmd, arg1, arg2);
+        self.file.write_all(buf.as_bytes())?;
+        Ok(())
+    }
+
+    fn _gen_label(&self, label: &str) -> String {
+        let mut file = "".to_string();
+        if let Some(f) = self.source_filename.clone() {
+            file = f;
+        };
+        let mut function = "".to_string();
+        if let Some(fun) = self.current_function.clone() {
+            function = fun;
+        };
+
+        format!("{file}.{function}${label}")
+    }
+
+    fn _write_label(&mut self, label: &str) -> String {
+        format!("({})\n", self._gen_label(label))
+    }
+
+    pub fn write_label(&mut self, label: &str) -> io::Result<()> {
+        let buf = self._write_label(label);
+        self.file.write_all(buf.as_bytes())?;
+        Ok(())
+    }
+
+    fn _write_goto(&mut self, label: &str) -> String {
+        format!("@{}\n", self._gen_label(label)) + "0;JMP\n"
+    }
+
+    pub fn write_goto(&mut self, label: &str) -> io::Result<()> {
+        let buf = self._write_goto(label);
+        self.file.write_all(buf.as_bytes())?;
+        Ok(())
+    }
+
+    fn _write_if(&mut self, label: &str) -> String {
+        String::new()
+            + "@SP\n"
+            + "AM=M-1\n"
+            + "D=M\n"
+            + &format!("@{}\n", self._gen_label(label))
+            + "D;JNE\n"
+    }
+
+    pub fn write_if(&mut self, label: &str) -> io::Result<()> {
+        let buf = self._write_if(label);
+        self.file.write_all(buf.as_bytes())?;
+        Ok(())
+    }
+
+    fn _write_function(&mut self, function_name: &str, n_vars: u32) -> String {
+        "".to_string()
+    }
+
+    pub fn write_function(&mut self, function_name: &str, n_vars: u32) -> io::Result<()> {
+        let buf = self._write_function(function_name, n_vars);
+        self.file.write_all(buf.as_bytes())?;
+        Ok(())
+    }
+
+    fn _write_call(&mut self, function_name: &str, n_args: u32) -> String {
+        "".to_string()
+    }
+
+    pub fn write_call(&mut self, function_name: &str, n_args: u32) -> io::Result<()> {
+        let buf = self._write_call(function_name, n_args);
+        self.file.write_all(buf.as_bytes())?;
+        Ok(())
+    }
+
+    fn _write_return(&mut self) -> String {
+        "".to_string()
+    }
+
+    pub fn write_return(&mut self) -> io::Result<()> {
+        let buf = self._write_return();
         self.file.write_all(buf.as_bytes())?;
         Ok(())
     }
