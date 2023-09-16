@@ -10,14 +10,16 @@ pub struct CodeWriter {
     target_filename: String,
     source_filename: Option<String>,
     current_function: Option<String>,
+    current_function_call_count: u32, // 每个函数内call的次数，用来分配不同的返回地址
     mem_seg_map: HashMap<String, String>,
 }
 
 impl CodeWriter {
     pub fn new(path: &Path) -> io::Result<Self> {
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .read(true)
             .write(true)
+            .append(true)
             .create(true)
             .open(path)?;
         let mem_seg_map = HashMap::from([
@@ -34,13 +36,22 @@ impl CodeWriter {
             .unwrap()
             .to_string();
 
-        Ok(Self {
+        // bootstrap code, call Sys.init
+        let buf = String::new() + "@256\n" + "D=A\n" + "@SP\n" + "M=D\n";
+
+        file.write_all(buf.as_bytes())?;
+        let mut _self = Self {
             file,
             target_filename,
             source_filename: None,
-            current_function: None,
+            current_function: Some("Bootstrap".to_string()),
+            current_function_call_count: 0,
             mem_seg_map,
-        })
+        };
+
+        _self.write_call("Sys.init", 0)?;
+
+        Ok(_self)
     }
 
     pub fn set_source_file(&mut self, source_file: &str) {
@@ -57,17 +68,17 @@ impl CodeWriter {
             "add" => {
                 String::new()
                     + "// start ======= add\n"
-                    + &self._write_pop("temp", 0)
-                    + &self._write_pop("temp", 1)
+                    + &self._write_pop("temp", 2)
+                    + &self._write_pop("temp", 3)
                     + "// start ======= temp0 = temp1 + temp0\n"
-                    + &format!("@{TEMP_BASE}\n")
+                    + &format!("@{}\n", TEMP_BASE+2)
                     + "A=A+1\n"
                     + "D=M\n"
-                    + &format!("@{TEMP_BASE}\n")
+                    + &format!("@{}\n", TEMP_BASE+2)
                     + "M=D+M\n" // D: x, M: y
                     + "// end ======= temp0 = temp1 + temp0\n"
                     + "\n"
-                    + &&self._write_push("temp", 0)
+                    + &&self._write_push("temp", 2)
                     + "// end ======= add\n"
                     + "\n"
             }
@@ -438,16 +449,16 @@ impl CodeWriter {
     }
 
     fn _gen_label(&self, label: &str) -> String {
-        let mut file = "".to_string();
-        if let Some(f) = self.source_filename.clone() {
-            file = f;
-        };
+        // let mut file = "".to_string();
+        // if let Some(f) = self.source_filename.clone() {
+        //     file = f[..(f.len() - 3)].to_string();
+        // };
         let mut function = "".to_string();
         if let Some(fun) = self.current_function.clone() {
             function = fun;
         };
 
-        format!("{file}.{function}${label}")
+        format!("{function}${label}")
     }
 
     fn _write_label(&mut self, label: &str) -> String {
@@ -485,8 +496,23 @@ impl CodeWriter {
         Ok(())
     }
 
+    fn _gen_fn_name(&self, function_name: &str) -> String {
+        // let mut file = "".to_string();
+        // if let Some(f) = self.source_filename.clone() {
+        //     file = f[..(f.len() - 3)].to_string();
+        // };
+        format!("{function_name}")
+    }
+
     fn _write_function(&mut self, function_name: &str, n_vars: u32) -> String {
-        "".to_string()
+        let mut s = String::new();
+        s += &format!("({})\n", self._gen_fn_name(function_name));
+        for _ in 0..n_vars {
+            s += &self._write_push("constant", 0);
+        }
+        self.current_function_call_count = 0;
+        self.set_current_function(function_name);
+        s
     }
 
     pub fn write_function(&mut self, function_name: &str, n_vars: u32) -> io::Result<()> {
@@ -495,8 +521,79 @@ impl CodeWriter {
         Ok(())
     }
 
+    fn _gen_return_address(&mut self) -> String {
+        let s = format!(
+            "{}$ret.{}",
+            self._gen_fn_name(&self.current_function.clone().unwrap()),
+            self.current_function_call_count
+        );
+        self.current_function_call_count += 1;
+        s
+    }
+
     fn _write_call(&mut self, function_name: &str, n_args: u32) -> String {
-        "".to_string()
+        let return_address = self._gen_return_address();
+        String::new()
+            + "// start call ========================\n"
+            + "// push return_address\n"
+            + &format!("@{return_address}\n")
+            + "D=A\n"
+            + "@SP\n"
+            + "A=M\n"
+            + "M=D\n"
+            + "@SP\n"
+            + "M=M+1\n"
+            + "// push LCL\n"
+            + "@LCL\n"
+            + "D=M\n"
+            + "@SP\n"
+            + "A=M\n"
+            + "M=D\n"
+            + "@SP\n"
+            + "M=M+1\n"
+            + "// push ARG\n"
+            + "@ARG\n"
+            + "D=M\n"
+            + "@SP\n"
+            + "A=M\n"
+            + "M=D\n"
+            + "@SP\n"
+            + "M=M+1\n"
+            + "// push THIS\n"
+            + "@THIS\n"
+            + "D=M\n"
+            + "@SP\n"
+            + "A=M\n"
+            + "M=D\n"
+            + "@SP\n"
+            + "M=M+1\n"
+            + "// push THAT\n"
+            + "@THAT\n"
+            + "D=M\n"
+            + "@SP\n"
+            + "A=M\n"
+            + "M=D\n"
+            + "@SP\n"
+            + "M=M+1\n"
+            + "// ARG=SP-5-n_args\n"
+            + "@SP\n"
+            + "D=M\n"
+            + "@5\n"
+            + "D=D-A\n"
+            + &format!("@{n_args}\n")
+            + "D=D-A\n"
+            + "@ARG\n"
+            + "M=D\n"
+            + "// LCL=SP\n"
+            + "@SP\n"
+            + "D=M\n"
+            + "@LCL\n"
+            + "M=D\n"
+            + "// goto function_name\n"
+            + &format!("@{}\n", self._gen_fn_name(function_name))
+            + "0;JMP\n"
+            + &format!("({})\n", return_address)
+            + "// end call ========================\n"
     }
 
     pub fn write_call(&mut self, function_name: &str, n_args: u32) -> io::Result<()> {
@@ -506,7 +603,70 @@ impl CodeWriter {
     }
 
     fn _write_return(&mut self) -> String {
-        "".to_string()
+        String::new()
+            + "// start return ========================\n"
+            + "// frame(R13)=LCL\n"
+            + "@LCL\n"
+            + "D=M\n"
+            + "@R13\n"
+            + "M=D\n"
+            + "// return_address(R14)=*(frame-5)\n"
+            + "@R13\n"
+            + "D=M\n"
+            + "@5\n"
+            + "A=D-A\n"
+            + "D=M\n"
+            + "@R14\n"
+            + "M=D\n"
+            + "// *ARG=pop()\n"
+            + "@SP\n"
+            + "AM=M-1\n"
+            + "D=M\n"
+            + "@ARG\n"
+            + "A=M\n"
+            + "M=D\n"
+            + "// SP=ARG+1\n"
+            + "@ARG\n"
+            + "D=M+1\n"
+            + "@SP\n"
+            + "M=D\n"
+            + "// THAT=*(frame-1)\n"
+            + "@R13\n"
+            + "D=M\n"
+            + "@1\n"
+            + "A=D-A\n"
+            + "D=M\n"
+            + "@THAT\n"
+            + "M=D\n"
+            + "// THIS=*(frame-2)\n"
+            + "@R13\n"
+            + "D=M\n"
+            + "@2\n"
+            + "A=D-A\n"
+            + "D=M\n"
+            + "@THIS\n"
+            + "M=D\n"
+            + "// ARG=*(frame-3)\n"
+            + "@R13\n"
+            + "D=M\n"
+            + "@3\n"
+            + "A=D-A\n"
+            + "D=M\n"
+            + "@ARG\n"
+            + "M=D\n"
+            + "// LCL=*(frame-4)\n"
+            + "@R13\n"
+            + "D=M\n"
+            + "@4\n"
+            + "A=D-A\n"
+            + "D=M\n"
+            + "@LCL\n"
+            + "M=D\n"
+            + "// goto return_address\n"
+            + "@R14\n"
+            + "A=M\n"
+            + "0;JMP\n"
+            + "// end return ========================\n"
     }
 
     pub fn write_return(&mut self) -> io::Result<()> {

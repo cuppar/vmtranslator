@@ -4,7 +4,7 @@ mod test_file;
 
 use code_writer::CodeWriter;
 use parser::*;
-use std::{env::args, error::Error, ffi::OsString, path::Path, result};
+use std::{env::args, error::Error, ffi::OsString, fs, path::Path, result};
 
 fn main() -> result::Result<(), Box<dyn Error>> {
     assert_eq!(
@@ -30,7 +30,25 @@ fn main() -> result::Result<(), Box<dyn Error>> {
 
         code_writer.close()?;
     } else if input_path.is_dir() {
-        // todo
+        let output_file_name = input_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+            + ".asm";
+        let output_file_path = input_path.join(output_file_name);
+
+        let mut code_writer = CodeWriter::new(&output_file_path)?;
+
+        for entry in fs::read_dir(input_path)? {
+            let entry = entry?;
+
+            if entry.path().is_file() && entry.path().extension().unwrap() == "vm" {
+                translate_file(&mut code_writer, &entry.path())?;
+            }
+        }
+        code_writer.close()?;
     }
 
     Ok(())
@@ -41,11 +59,12 @@ fn translate_file(
     file_path: &Path,
 ) -> result::Result<(), Box<dyn Error>> {
     let mut parser = Parser::new(file_path)?;
-    code_writer.set_source_file(file_path.file_name().unwrap().to_str().unwrap());
-    
+    let source_file_name = file_path.file_name().unwrap().to_str().unwrap();
+    code_writer.set_source_file(source_file_name);
+
     loop {
         if !parser.has_more_lines() {
-            break;
+        break;
         }
         parser.advance();
         if let Some(cmd) = &parser.get_cmd_type() {
@@ -54,12 +73,16 @@ fn translate_file(
                 Push | Pop => {
                     code_writer.write_push_pop(&parser.cmd(), &parser.arg1(), parser.arg2())?
                 }
+                Arithmetic => code_writer.write_arithmetic(
+                    &parser.cmd(),
+                    &format!("{source_file_name}.{}", parser.next_cmd_number - 1),
+                )?,
                 Label => code_writer.write_label(&parser.arg1())?,
                 Goto => code_writer.write_goto(&parser.arg1())?,
                 If => code_writer.write_if(&parser.arg1())?,
-                Arithmetic => code_writer
-                    .write_arithmetic(&parser.cmd(), &(parser.next_cmd_number - 1).to_string())?,
-                _ => (),
+                Function => code_writer.write_function(&parser.arg1(), parser.arg2() as u32)?,
+                Call => code_writer.write_call(&parser.arg1(), parser.arg2() as u32)?,
+                Return => code_writer.write_return()?,
             }
         }
     }
