@@ -3,7 +3,7 @@
 vmtranslator is the compiler backend of language Jack, the compiler frontend is [`jackc`](https://github.com/cuppar/jackc).
 
 - `vmtranslator` transfer a `XXX.vm` vm program to a `XXX.asm` file, a `XXX.asm` file.
-- The `XXX.asm` file is the `Hack` assembly code file.
+- The `XXX.asm` file is the `Hack` assembly code file, it can be translate to `Hack` machine language by [`assembler`](https://github.com/cuppar/assembler).
 - `Hack` is a very simple assembly language, it has only two type instruction, `A`(Address) instruction and `C`(Compute) instruction.
 
 ## Example
